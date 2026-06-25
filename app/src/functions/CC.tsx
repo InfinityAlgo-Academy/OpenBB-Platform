@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  fetchIndexHistorical, fetchTreasuryRates, fetchFxHistorical, fetchCryptoHistorical,
-  fetchGainers, fetchLosers, fetchMostActive, fetchNewsCompany, type Candle,
+  fetchTreasuryRates, fetchGainers, fetchLosers, fetchMostActive, fetchNewsCompany,
 } from "@/lib/api";
 import { fmtPrice, fmtPct, fmtTime, fmtPctFromDecimal } from "@/lib/format";
 import { useWorkspace } from "@/store/workspaceStore";
@@ -64,6 +63,7 @@ export function CC() {
 
   // Real-time prices from TradingView
   const [rtPrices, setRtPrices] = useState<Record<string, RealtimePrice>>({});
+  const [idxTicks, setIdxTicks] = useState<Record<string, number[]>>({});
   useEffect(() => {
     rt.connect();
     const unsubs: (() => void)[] = [];
@@ -71,40 +71,14 @@ export function CC() {
     for (const sym of allSyms) {
       const unsub = rt.subscribe(sym, (data) => {
         setRtPrices(prev => ({ ...prev, [sym]: data }));
+        if (data.lp != null) {
+          setIdxTicks(prev => ({ ...prev, [sym]: [...(prev[sym] ?? []).slice(-59), data.lp!] }));
+        }
       });
       unsubs.push(unsub);
     }
     return () => unsubs.forEach(fn => fn());
   }, []);
-
-  // Indices
-  const idxQueries = useQueries({
-    queries: INDICES.map((i) => ({
-      queryKey: ["cc-idx", i.sym],
-      queryFn: () => fetchIndexHistorical(i.sym, 14),
-      refetchInterval: 60_000,
-    })),
-  });
-
-  // FX + crypto
-  const fxSymbols = FX_CRYPTO.filter(x => x.kind === "fx");
-  const cryptoKinds = FX_CRYPTO.filter(x => x.kind !== "fx");
-  const fxQuery = useQuery({
-    queryKey: ["cc-fx"],
-    queryFn: () => fetchFxHistorical(fxSymbols.map(x => x.sym), 14),
-    refetchInterval: 60_000,
-  });
-  const cryptoQueries = useQueries({
-    queries: cryptoKinds.map((x) => ({
-      queryKey: ["cc-crypto", x.sym],
-      queryFn: () => fetchCryptoHistorical(x.sym, 14),
-      refetchInterval: 60_000,
-    })),
-  });
-  const fxQueryMap: Record<string, typeof fxQuery> = {};
-  for (const x of fxSymbols) fxQueryMap[x.sym] = fxQuery;
-  const cryptoQueryMap: Record<string, (typeof cryptoQueries)[number]> = {};
-  for (let i = 0; i < cryptoKinds.length; i++) cryptoQueryMap[cryptoKinds[i].sym] = cryptoQueries[i];
 
   // Yield curve
   const curve = useQuery({
@@ -147,24 +121,20 @@ export function CC() {
       <div className="panel">
         <div className="panel-header">
           <span>US MARKETS</span>
-          <span className="sub-header normal-case tracking-normal font-normal">close-over-close · 14d</span>
+          <span className="sub-header normal-case tracking-normal font-normal">REAL-TIME VIA TRADINGVIEW</span>
         </div>
         <div className="grid grid-cols-4 divide-x divide-term-border">
-          {INDICES.map((idx, i) => {
-            const q = idxQueries[i];
-            const data = q.data ?? [];
-            const last = data[data.length - 1];
-            const prev = data[data.length - 2];
+          {INDICES.map((idx) => {
             const rt = rtPrices[idx.sym];
-            const price = rt?.lp ?? last?.close;
-            const chgPct = rt?.chp ?? (last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined);
+            const price = rt?.lp;
+            const chgPct = rt?.chp;
             const dir = chgPct == null ? "flat" : chgPct >= 0 ? "up" : "down";
-            const vals = data.map((d) => d.close);
+            const vals = idxTicks[idx.sym] ?? [];
             return (
               <div key={idx.sym} className="p-2 flex flex-col">
                 <div className="sub-header">{idx.name}</div>
                 <div className="num text-[16px] text-term-heading mt-1">
-                  {q.isLoading && price == null ? "…" : price != null ? price.toFixed(2) : "—"}
+                  {price == null ? "…" : price.toFixed(2)}
                 </div>
                 <div className={cn("num text-[11px]", dir === "up" && "up", dir === "down" && "down")}>
                   {fmtPct(chgPct)}
@@ -233,25 +203,17 @@ export function CC() {
         </div>
         <div className="p-2 flex flex-col divide-y divide-term-borderSoft text-[12px]">
           {FX_CRYPTO.map((x) => {
-            const q = x.kind === "fx" ? fxQueryMap[x.sym] : cryptoQueryMap[x.sym];
-            const raw = (q.data ?? []) as (Candle & { symbol?: string })[];
-            const data = x.kind === "fx"
-              ? raw.filter(r => r.symbol?.replace("=X", "") === x.sym.replace("=X", ""))
-              : raw;
-            const last = data[data.length - 1];
-            const prev = data[data.length - 2];
-            const chgPct = last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined;
             const rtItem = rtPrices[x.sym];
-            const fxPrice = rtItem?.lp ?? last?.close;
-            const fxChgPct = rtItem?.chp ?? chgPct;
+            const fxPrice = rtItem?.lp;
+            const fxChgPct = rtItem?.chp;
             const dir = fxChgPct == null ? "flat" : fxChgPct >= 0 ? "up" : "down";
             return (
               <div key={x.sym} className="flex items-center gap-2 py-1.5">
                 <span className="text-term-amber font-bold text-[11px] w-16">{x.name}</span>
                 <span className="num flex-1">
-                  {q.isLoading && fxPrice == null ? "…" : fxPrice != null
+                  {fxPrice != null
                     ? fxPrice.toLocaleString(undefined, { minimumFractionDigits: x.digits, maximumFractionDigits: x.digits })
-                    : "—"}
+                    : "…"}
                 </span>
                 <span className={cn("num text-[11px] w-16 text-right", dir === "up" && "up", dir === "down" && "down")}>
                   {fmtPct(fxChgPct)}
