@@ -35,7 +35,7 @@ export function StatusBar() {
           } />
           <span>OPENBB {apiOk == null ? "…" : apiOk ? "LIVE" : "DOWN"}</span>
         </span>
-        <span>PROVIDER <span className="text-term-amber ml-1">YFINANCE</span></span>
+        <span>REAL-TIME VIA <span className="text-term-amber ml-1">TRADINGVIEW</span></span>
         <span>TABS <span className="text-term-text ml-1 num">{tabs.length}</span></span>
       </div>
       <div className="flex items-center gap-5 num">
