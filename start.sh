@@ -11,6 +11,7 @@ ok()   { printf "${GREEN}✓ %s${RST}\n" "$*"; }
 fail() { printf "${RED}✗ %s${RST}\n" "$*" >&2; exit 1; }
 
 API_PORT=6900
+RT_PORT=6901
 UI_PORT=5173
 
 [ -x .venv/bin/openbb-api ] || fail "Run ./setup.sh first (OpenBB is not installed)."
@@ -39,6 +40,23 @@ else
   done
 fi
 
+# -------- Realtime Server (TradingView WebSocket relay) --------
+if port_in_use "$RT_PORT"; then
+  ok "Realtime server already running on :$RT_PORT"
+else
+  step "Starting realtime server on :$RT_PORT"
+  cd app && nohup node realtime-server.cjs > /tmp/bbterminal-rt.log 2>&1 &
+  RT_PID=$!
+  cd "$OLDPWD"
+  printf "  ${DIM}waiting for realtime server"
+  for i in $(seq 1 15); do
+    if curl -s -o /dev/null "http://127.0.0.1:$RT_PORT/health"; then
+      printf "${RST}\n"; ok "Realtime server up (pid $RT_PID)"; break
+    fi
+    printf "."; sleep 1
+  done
+fi
+
 # -------- UI --------
 if port_in_use "$UI_PORT"; then
   ok "UI dev server already running on :$UI_PORT"
@@ -47,7 +65,7 @@ else
   ( cd app && nohup npm run dev > /tmp/bbterminal-ui.log 2>&1 & )
   printf "  ${DIM}waiting for UI"
   for i in $(seq 1 30); do
-    if curl -s -o /dev/null "http://127.0.0.1:$UI_PORT/"; then
+    if curl -s -o /dev/null "http://localhost:$UI_PORT/"; then
       printf "${RST}\n"; ok "UI up"; break
     fi
     printf "."; sleep 1
@@ -74,6 +92,7 @@ ${AMBER}  BBterminal is live${RST}
   API docs:   ${DIM}http://localhost:${API_PORT}/docs${RST}
 
   Logs:       /tmp/bbterminal-api.log
+              /tmp/bbterminal-rt.log
               /tmp/bbterminal-ui.log
 
   Stop:       ${AMBER}./stop.sh${RST}

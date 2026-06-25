@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   fetchIndexHistorical, fetchTreasuryRates, fetchFxHistorical, fetchCryptoHistorical,
@@ -6,6 +7,7 @@ import {
 import { fmtPrice, fmtPct, fmtTime, fmtPctFromDecimal } from "@/lib/format";
 import { useWorkspace } from "@/store/workspaceStore";
 import { cn } from "@/lib/cn";
+import { rt, type RealtimePrice } from "@/lib/realtime";
 
 const INDICES = [
   { sym: "^GSPC", name: "S&P 500" },
@@ -40,7 +42,6 @@ const FX_CRYPTO = [
   { sym: "ADA-USD",  name: "ADA",     kind: "crypto", digits: 3 },
   { sym: "EURGBP=X", name: "EUR/GBP", kind: "fx", digits: 4 },
   { sym: "LINK-USD", name: "LINK",    kind: "crypto", digits: 2 },
-  { sym: "DOT-USD",  name: "DOT",     kind: "crypto", digits: 2 },
 ];
 
 function Spark({ values, color = "#ff8c00" }: { values: number[]; color?: string }) {
@@ -60,6 +61,21 @@ function Spark({ values, color = "#ff8c00" }: { values: number[]; color?: string
 
 export function CC() {
   const openTab = useWorkspace((s) => s.openTab);
+
+  // Real-time prices from TradingView
+  const [rtPrices, setRtPrices] = useState<Record<string, RealtimePrice>>({});
+  useEffect(() => {
+    rt.connect();
+    const unsubs: (() => void)[] = [];
+    const allSyms = [...INDICES.map(i => i.sym), ...FX_CRYPTO.map(x => x.sym)];
+    for (const sym of allSyms) {
+      const unsub = rt.subscribe(sym, (data) => {
+        setRtPrices(prev => ({ ...prev, [sym]: data }));
+      });
+      unsubs.push(unsub);
+    }
+    return () => unsubs.forEach(fn => fn());
+  }, []);
 
   // Indices
   const idxQueries = useQueries({
@@ -130,14 +146,16 @@ export function CC() {
             const data = q.data ?? [];
             const last = data[data.length - 1];
             const prev = data[data.length - 2];
-            const chgPct = last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined;
+            const rt = rtPrices[idx.sym];
+            const price = rt?.lp ?? last?.close;
+            const chgPct = rt?.chp ?? (last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined);
             const dir = chgPct == null ? "flat" : chgPct >= 0 ? "up" : "down";
             const vals = data.map((d) => d.close);
             return (
               <div key={idx.sym} className="p-2 flex flex-col">
                 <div className="sub-header">{idx.name}</div>
                 <div className="num text-[16px] text-term-heading mt-1">
-                  {q.isLoading ? "…" : last?.close != null ? last.close.toFixed(2) : "—"}
+                  {q.isLoading && price == null ? "…" : price != null ? price.toFixed(2) : "—"}
                 </div>
                 <div className={cn("num text-[11px]", dir === "up" && "up", dir === "down" && "down")}>
                   {fmtPct(chgPct)}
@@ -211,17 +229,20 @@ export function CC() {
             const last = data[data.length - 1];
             const prev = data[data.length - 2];
             const chgPct = last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined;
-            const dir = chgPct == null ? "flat" : chgPct >= 0 ? "up" : "down";
+            const rtItem = rtPrices[x.sym];
+            const fxPrice = rtItem?.lp ?? last?.close;
+            const fxChgPct = rtItem?.chp ?? chgPct;
+            const dir = fxChgPct == null ? "flat" : fxChgPct >= 0 ? "up" : "down";
             return (
               <div key={x.sym} className="flex items-center gap-2 py-1.5">
                 <span className="text-term-amber font-bold text-[11px] w-16">{x.name}</span>
                 <span className="num flex-1">
-                  {q.isLoading ? "…" : last?.close != null
-                    ? last.close.toLocaleString(undefined, { minimumFractionDigits: x.digits, maximumFractionDigits: x.digits })
+                  {q.isLoading && fxPrice == null ? "…" : fxPrice != null
+                    ? fxPrice.toLocaleString(undefined, { minimumFractionDigits: x.digits, maximumFractionDigits: x.digits })
                     : "—"}
                 </span>
                 <span className={cn("num text-[11px] w-16 text-right", dir === "up" && "up", dir === "down" && "down")}>
-                  {fmtPct(chgPct)}
+                  {fmtPct(fxChgPct)}
                 </span>
               </div>
             );
