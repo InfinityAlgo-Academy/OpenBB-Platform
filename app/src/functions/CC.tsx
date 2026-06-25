@@ -316,6 +316,7 @@ export function CC() {
           ))}
         </div>
       </div>
+      <div className="sub-header text-center" style={{ gridColumn: "1 / -1" }}>REAL-TIME VIA TRADINGVIEW</div>
     </div>
   );
 }
