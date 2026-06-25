@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   fetchIndexHistorical, fetchTreasuryRates, fetchFxHistorical, fetchCryptoHistorical,
-  fetchGainers, fetchLosers, fetchMostActive, fetchNewsCompany,
+  fetchGainers, fetchLosers, fetchMostActive, fetchNewsCompany, type Candle,
 } from "@/lib/api";
 import { fmtPrice, fmtPct, fmtTime, fmtPctFromDecimal } from "@/lib/format";
 import { useWorkspace } from "@/store/workspaceStore";
@@ -87,15 +87,24 @@ export function CC() {
   });
 
   // FX + crypto
-  const fxQueries = useQueries({
-    queries: FX_CRYPTO.map((x) => ({
-      queryKey: ["cc-fxc", x.sym],
-      queryFn: () => x.kind === "fx"
-        ? fetchFxHistorical(x.sym, 14)
-        : fetchCryptoHistorical(x.sym, 14),
+  const fxSymbols = FX_CRYPTO.filter(x => x.kind === "fx");
+  const cryptoKinds = FX_CRYPTO.filter(x => x.kind !== "fx");
+  const fxQuery = useQuery({
+    queryKey: ["cc-fx"],
+    queryFn: () => fetchFxHistorical(fxSymbols.map(x => x.sym), 14),
+    refetchInterval: 60_000,
+  });
+  const cryptoQueries = useQueries({
+    queries: cryptoKinds.map((x) => ({
+      queryKey: ["cc-crypto", x.sym],
+      queryFn: () => fetchCryptoHistorical(x.sym, 14),
       refetchInterval: 60_000,
     })),
   });
+  const fxQueryMap: Record<string, typeof fxQuery> = {};
+  for (const x of fxSymbols) fxQueryMap[x.sym] = fxQuery;
+  const cryptoQueryMap: Record<string, (typeof cryptoQueries)[number]> = {};
+  for (let i = 0; i < cryptoKinds.length; i++) cryptoQueryMap[cryptoKinds[i].sym] = cryptoQueries[i];
 
   // Yield curve
   const curve = useQuery({
@@ -223,9 +232,12 @@ export function CC() {
                 onClick={() => openTab("FXC")}>all FX →</span>
         </div>
         <div className="p-2 flex flex-col divide-y divide-term-borderSoft text-[12px]">
-          {FX_CRYPTO.map((x, i) => {
-            const q = fxQueries[i];
-            const data = q.data ?? [];
+          {FX_CRYPTO.map((x) => {
+            const q = x.kind === "fx" ? fxQueryMap[x.sym] : cryptoQueryMap[x.sym];
+            const raw = (q.data ?? []) as (Candle & { symbol?: string })[];
+            const data = x.kind === "fx"
+              ? raw.filter(r => r.symbol?.replace("=X", "") === x.sym.replace("=X", ""))
+              : raw;
             const last = data[data.length - 1];
             const prev = data[data.length - 2];
             const chgPct = last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined;

@@ -8,7 +8,8 @@ export class ApiError extends Error {
 
 async function get<T>(
   path: string,
-  params: Record<string, string | number | boolean | undefined> = {}
+  params: Record<string, string | number | boolean | undefined> = {},
+  retries = 1
 ): Promise<T> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -24,6 +25,10 @@ async function get<T>(
     else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || JSON.stringify(d)).join("; ");
     const m = /credential '([a-z_]+)'/i.exec(msg);
     if (m) needsKey = m[1];
+    if (retries > 0 && (res.status >= 500 || res.status === 422)) {
+      await new Promise(r => setTimeout(r, 1000));
+      return get<T>(path, params, retries - 1);
+    }
     throw new ApiError(res.status, msg, needsKey);
   }
   return body.results as T;
@@ -101,7 +106,7 @@ export const fetchHistorical = (s: string, o: { interval?: string; start_date?: 
 };
 
 export const fetchNewsCompany = (s: string, limit = 30) =>
-  get<NewsItem[]>("/news/company", { symbol: s, provider: "yfinance", limit });
+  safeGet<NewsItem[]>("/news/company", { symbol: s, provider: "yfinance", limit });
 
 export const fetchProfile = (s: string) =>
   get<Profile[] | Profile>("/equity/profile", { symbol: s, provider: "yfinance" })
@@ -124,40 +129,45 @@ export const fetchConsensus = (s: string) =>
     symbol: s, provider: "yfinance",
   }).then((r) => (Array.isArray(r) ? r[0] : r));
 
+const safeGet = async <T>(path: string, params: Record<string, string | number | boolean | undefined> = {}): Promise<T> => {
+  try { return await get<T>(path, params); } catch { return [] as unknown as T; }
+};
+
 export const fetchGainers = () =>
-  get<Mover[]>("/equity/discovery/gainers", { provider: "yfinance" });
+  safeGet<Mover[]>("/equity/discovery/gainers", { provider: "yfinance" });
 export const fetchLosers = () =>
-  get<Mover[]>("/equity/discovery/losers", { provider: "yfinance" });
+  safeGet<Mover[]>("/equity/discovery/losers", { provider: "yfinance" });
 export const fetchMostActive = () =>
-  get<Mover[]>("/equity/discovery/active", { provider: "yfinance" });
+  safeGet<Mover[]>("/equity/discovery/active", { provider: "yfinance" });
 
 export const fetchOptions = (s: string) =>
   get<OptionsRow[]>("/derivatives/options/chains", { symbol: s, provider: "yfinance" });
 
 export const fetchIndexHistorical = (s: string, days = 30) => {
   const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
-  return get<Candle[]>("/index/price/historical", {
+  return safeGet<Candle[]>("/index/price/historical", {
     symbol: s, provider: "yfinance", interval: "1d", start_date: start,
   });
 };
 
 export const fetchTreasuryRates = (days = 30) => {
   const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
-  return get<TreasuryRow[]>("/fixedincome/government/treasury_rates", {
+  return safeGet<TreasuryRow[]>("/fixedincome/government/treasury_rates", {
     provider: "federal_reserve", start_date: start,
   });
 };
 
-export const fetchFxHistorical = (pair: string, days = 30) => {
+export const fetchFxHistorical = (pairs: string[], days = 30) => {
   const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
-  return get<Candle[]>("/currency/price/historical", {
-    symbol: pair, provider: "yfinance", interval: "1d", start_date: start,
+  const sym = pairs.map(p => p.replace("=X", "")).join(",");
+  return safeGet<Candle[]>("/currency/price/historical", {
+    symbol: sym, provider: "yfinance", interval: "1d", start_date: start,
   });
 };
 
 export const fetchCryptoHistorical = (sym: string, days = 30) => {
   const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
-  return get<Candle[]>("/crypto/price/historical", {
+  return safeGet<Candle[]>("/crypto/price/historical", {
     symbol: sym, provider: "yfinance", interval: "1d", start_date: start,
   });
 };

@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { fetchFxHistorical } from "@/lib/api";
+import { fetchFxHistorical, type Candle } from "@/lib/api";
 import { fmtPct } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -9,7 +9,10 @@ export function FXC() {
   const queries = useQueries({
     queries: MAJORS.map((p) => ({
       queryKey: ["fx", p],
-      queryFn: () => fetchFxHistorical(p + "=X", 10),
+      queryFn: () => fetchFxHistorical([p + "=X"], 10).then(
+          r => r.filter((c: Candle & { symbol?: string }) =>
+            c.symbol?.replace("=X", "") === p)
+        ),
       refetchInterval: 60_000,
     })),
   });

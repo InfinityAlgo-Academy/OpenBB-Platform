@@ -63,8 +63,9 @@ function toTradingView(sym) {
 
 let tvClient = null;
 let tvQuoteSession = null;
-const markets = new Map();
-const clientSubs = new Map();
+const markets = new Map();        // TV symbol -> { market, refs, lastData }
+const tvToYahoo = new Map();       // TV symbol -> Set<original Yahoo symbol>
+const clientSubs = new Map();      // WebSocket -> Set<original Yahoo symbol>
 
 function ensureTvConnected() {
   if (tvClient && tvClient.isOpen) return;
@@ -73,19 +74,25 @@ function ensureTvConnected() {
   tvQuoteSession = new tvClient.Session.Quote();
 }
 
-function subscribeSymbol(tvSym) {
+function subscribeSymbol(yahooSym, tvSym) {
   if (markets.has(tvSym)) {
     markets.get(tvSym).refs++;
+    if (!tvToYahoo.has(tvSym)) tvToYahoo.set(tvSym, new Set());
+    tvToYahoo.get(tvSym).add(yahooSym);
     return;
   }
   ensureTvConnected();
   const market = new tvQuoteSession.Market(tvSym);
   const entry = { market, refs: 1, lastData: null };
   markets.set(tvSym, entry);
+  const yahooSet = new Set([yahooSym]);
+  tvToYahoo.set(tvSym, yahooSet);
 
   market.onData((data) => {
     entry.lastData = data;
-    broadcast({ type: "price", symbol: tvSym, data });
+    for (const orig of yahooSet) {
+      broadcast({ type: "price", symbol: orig, data });
+    }
   });
 
   market.onError((...err) => {
@@ -93,13 +100,19 @@ function subscribeSymbol(tvSym) {
   });
 }
 
-function unsubscribeSymbol(tvSym) {
+function unsubscribeSymbol(yahooSym, tvSym) {
   const entry = markets.get(tvSym);
   if (!entry) return;
+  const yahooSet = tvToYahoo.get(tvSym);
+  if (yahooSet) {
+    yahooSet.delete(yahooSym);
+    if (yahooSet.size === 0) tvToYahoo.delete(tvSym);
+  }
   entry.refs--;
   if (entry.refs <= 0) {
     entry.market.close();
     markets.delete(tvSym);
+    tvToYahoo.delete(tvSym);
   }
 }
 
@@ -133,7 +146,7 @@ wss.on("connection", (ws) => {
       for (const sym of msg.symbols) {
         if (subs.has(sym)) continue;
         const tvSym = toTradingView(sym);
-        subscribeSymbol(tvSym);
+        subscribeSymbol(sym, tvSym);
         subs.add(sym);
       }
     }
@@ -142,7 +155,7 @@ wss.on("connection", (ws) => {
       for (const sym of msg.symbols) {
         if (!subs.has(sym)) continue;
         const tvSym = toTradingView(sym);
-        unsubscribeSymbol(tvSym);
+        unsubscribeSymbol(sym, tvSym);
         subs.delete(sym);
       }
     }
@@ -151,7 +164,7 @@ wss.on("connection", (ws) => {
   ws.on("close", () => {
     for (const sym of subs) {
       const tvSym = toTradingView(sym);
-      unsubscribeSymbol(tvSym);
+      unsubscribeSymbol(sym, tvSym);
     }
     clientSubs.delete(ws);
   });

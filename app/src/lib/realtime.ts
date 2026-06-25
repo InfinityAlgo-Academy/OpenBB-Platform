@@ -27,17 +27,22 @@ class RealtimeClient {
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.ws?.readyState === WebSocket.CONNECTING) return;
+
     try {
       this.ws = new WebSocket(RT_URL);
     } catch { return; }
 
-    this.ws.onopen = () => {
-      if (this.subs.size > 0) {
-        this.ws!.send(JSON.stringify({ type: "subscribe", symbols: [...this.subs] }));
+    const ws = this.ws;
+
+    ws.onopen = () => {
+      const pending = [...this.subs];
+      if (pending.length > 0) {
+        ws.send(JSON.stringify({ type: "subscribe", symbols: pending }));
       }
     };
 
-    this.ws.onmessage = (ev) => {
+    ws.onmessage = (ev) => {
       let msg: any;
       try { msg = JSON.parse(ev.data); } catch { return; }
       if (msg.type === "price") {
@@ -47,11 +52,11 @@ class RealtimeClient {
       }
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = () => {
       this.reconnectTimer = setTimeout(() => this.connect(), 3000);
     };
 
-    this.ws.onerror = () => {};
+    ws.onerror = () => {};
   }
 
   subscribe(symbol: string, listener: Listener) {
