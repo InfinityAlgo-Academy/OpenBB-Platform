@@ -91,7 +91,7 @@ const tvToYahoo = new Map();       // TV symbol -> Set<original Yahoo symbol>
 const clientSubs = new Map();      // WebSocket -> Set<original Yahoo symbol>
 
 function ensureTvConnected() {
-  if (tvClient && tvClient.isOpen) return;
+  if (tvClient) return;
   tvClient = new TradingView.Client();
   tvClient.onError(() => {});
   tvQuoteSession = new tvClient.Session.Quote();
