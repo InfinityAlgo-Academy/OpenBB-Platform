@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGainers, fetchLosers, fetchMostActive } from "@/lib/api";
 import { fmtPrice, fmtPct, fmtVolume } from "@/lib/format";
 import { useWorkspace } from "@/store/workspaceStore";
 import { cn } from "@/lib/cn";
+import { useSymbolsRT } from "@/lib/realtime";
 
 type Kind = "gainers" | "losers" | "active";
 const TABS: { id: Kind; label: string }[] = [
@@ -22,6 +23,9 @@ export function MOV() {
     refetchInterval: 60_000,
   });
 
+  const symbols = data.slice(0, 100).map(m => m.symbol);
+  const rtPrices = useSymbolsRT(symbols);
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-3 h-8 px-3 border-b border-term-border bg-term-panel2 text-[11px] uppercase tracking-wider">
@@ -32,7 +36,7 @@ export function MOV() {
             {t.label}
           </button>
         ))}
-        <span className="ml-auto text-term-muted">{data.length} rows · src: yfinance</span>
+        <span className="ml-auto text-term-muted">{data.length} rows · RT via TradingView</span>
       </div>
       <div className="flex-1 overflow-auto scroll-thin">
         {isLoading && <div className="p-4 text-term-muted uppercase text-[11px] tracking-widest">Loading…</div>}
@@ -54,20 +58,24 @@ export function MOV() {
             </thead>
             <tbody>
               {data.slice(0, 100).map((m, i) => {
-                const dir = m.percent_change >= 0 ? "up" : "down";
+                const r = rtPrices[m.symbol];
+                const price = r?.lp ?? m.price;
+                const chg = r?.ch ?? m.change;
+                const chgPct = r?.chp ?? m.percent_change * 100;
+                const dir = chgPct >= 0 ? "up" : "down";
                 return (
                   <tr key={m.symbol} className="cursor-pointer" onClick={() => openTab("DES", m.symbol)}>
                     <td className="text-term-muted num">{i + 1}</td>
                     <td className="num text-term-amber font-semibold">{m.symbol}</td>
                     <td className="truncate max-w-[260px] text-term-heading">{m.name}</td>
-                    <td className="num text-right">{fmtPrice(m.price)}</td>
+                    <td className="num text-right">{fmtPrice(price)}</td>
                     <td className={cn("num text-right", dir === "up" ? "up" : "down")}>
-                      {(m.change >= 0 ? "+" : "") + fmtPrice(m.change)}
+                      {(chg >= 0 ? "+" : "") + fmtPrice(chg)}
                     </td>
                     <td className={cn("num text-right", dir === "up" ? "up" : "down")}>
-                      {fmtPct(m.percent_change * 100)}
+                      {fmtPct(chgPct)}
                     </td>
-                    <td className="num text-right text-term-muted">{fmtVolume(m.volume)}</td>
+                    <td className="num text-right text-term-muted">{fmtVolume(r?.volume ?? m.volume)}</td>
                     <td className="num text-right text-term-muted">{fmtVolume(m.market_cap)}</td>
                     <td className="num text-right text-term-muted">{m.pe_forward?.toFixed(1) ?? "—"}</td>
                   </tr>

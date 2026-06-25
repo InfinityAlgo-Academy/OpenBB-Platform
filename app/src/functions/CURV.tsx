@@ -3,31 +3,46 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchTreasuryRates } from "@/lib/api";
 import { fmtPctFromDecimal, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useSymbolsRT } from "@/lib/realtime";
 
-const TENORS: { k: keyof import("@/lib/api").TreasuryRow; label: string; years: number }[] = [
-  { k: "month_1", label: "1M", years: 1/12 },
-  { k: "month_3", label: "3M", years: 3/12 },
-  { k: "month_6", label: "6M", years: 6/12 },
-  { k: "year_1",  label: "1Y", years: 1 },
-  { k: "year_2",  label: "2Y", years: 2 },
-  { k: "year_3",  label: "3Y", years: 3 },
-  { k: "year_5",  label: "5Y", years: 5 },
-  { k: "year_7",  label: "7Y", years: 7 },
-  { k: "year_10", label: "10Y", years: 10 },
-  { k: "year_20", label: "20Y", years: 20 },
-  { k: "year_30", label: "30Y", years: 30 },
+const TENORS: { k: keyof import("@/lib/api").TreasuryRow; label: string; years: number; rtSym: string }[] = [
+  { k: "month_1", label: "1M", years: 1/12, rtSym: "US01M" },
+  { k: "month_3", label: "3M", years: 3/12, rtSym: "US03M" },
+  { k: "month_6", label: "6M", years: 6/12, rtSym: "US06M" },
+  { k: "year_1",  label: "1Y", years: 1,    rtSym: "US01Y" },
+  { k: "year_2",  label: "2Y", years: 2,    rtSym: "US02Y" },
+  { k: "year_3",  label: "3Y", years: 3,    rtSym: "US03Y" },
+  { k: "year_5",  label: "5Y", years: 5,    rtSym: "US05Y" },
+  { k: "year_7",  label: "7Y", years: 7,    rtSym: "US07Y" },
+  { k: "year_10", label: "10Y", years: 10,  rtSym: "US10Y" },
+  { k: "year_20", label: "20Y", years: 20,  rtSym: "US20Y" },
+  { k: "year_30", label: "30Y", years: 30,  rtSym: "US30Y" },
 ];
 
 export function CURV() {
   const { data = [], isLoading, error } = useQuery({
     queryKey: ["treasury-rates"], queryFn: () => fetchTreasuryRates(40),
-    refetchInterval: 3600_000,
+    staleTime: 3600_000,
   });
+  const rt = useSymbolsRT(TENORS.map(t => t.rtSym));
 
   const sorted = useMemo(() => [...data].sort((a, b) => (a.date > b.date ? -1 : 1)), [data]);
-  const today = sorted[0];
-  const week = sorted.find((r) => new Date(r.date).getTime() <= new Date(today?.date ?? "").getTime() - 7 * 864e5);
-  const month = sorted.find((r) => new Date(r.date).getTime() <= new Date(today?.date ?? "").getTime() - 30 * 864e5);
+  const histToday = sorted[0];
+  const week = sorted.find((r) => new Date(r.date).getTime() <= new Date(histToday?.date ?? "").getTime() - 7 * 864e5);
+  const month = sorted.find((r) => new Date(r.date).getTime() <= new Date(histToday?.date ?? "").getTime() - 30 * 864e5);
+
+  // Merge RT data into today's rates
+  const today = useMemo(() => {
+    if (!histToday) return null;
+    const merged = { ...histToday } as import("@/lib/api").TreasuryRow;
+    for (const t of TENORS) {
+      const r = rt[t.rtSym];
+      if (r?.lp != null) {
+        (merged as any)[t.k] = r.lp / 100;
+      }
+    }
+    return merged;
+  }, [histToday, rt]);
 
   if (isLoading) return <div className="p-4 text-term-muted uppercase text-[11px] tracking-widest">Loading yield curve…</div>;
   if (error) return <div className="p-4 text-term-red">{(error as Error).message}</div>;

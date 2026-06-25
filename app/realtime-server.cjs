@@ -48,6 +48,20 @@ const CRYPTO_MAP = {
   "MATIC": "BINANCE:MATICUSDT",
 };
 
+const TREASURY_MAP = {
+  "01M": "TVC:US1M",
+  "03M": "TVC:US3M",
+  "06M": "TVC:US6M",
+  "01Y": "TVC:US01Y",
+  "02Y": "TVC:US02Y",
+  "03Y": "TVC:US03Y",
+  "05Y": "TVC:US05Y",
+  "07Y": "TVC:US07Y",
+  "10Y": "TVC:US10Y",
+  "20Y": "TVC:US20Y",
+  "30Y": "TVC:US30Y",
+};
+
 function toTradingView(sym) {
   if (YAHOO_TO_TV[sym]) return YAHOO_TO_TV[sym];
 
@@ -59,6 +73,11 @@ function toTradingView(sym) {
   if (sym.endsWith("-USD")) {
     const coin = sym.replace("-USD", "");
     return CRYPTO_MAP[coin] || `COINBASE:${coin}USD`;
+  }
+
+  // Treasury yield symbols: US10Y, US02Y, etc.
+  if (sym.startsWith("US") && TREASURY_MAP[sym.slice(2)]) {
+    return TREASURY_MAP[sym.slice(2)];
   }
 
   if (sym.startsWith("^")) return sym;
