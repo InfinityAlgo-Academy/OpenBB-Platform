@@ -20,6 +20,19 @@ const YAHOO_TO_TV = {
   "^VIX":   "TVC:VIX",
   "^RUI":   "TVC:RUI",
   "^VXN":   "CBOE:VXN",
+  // World Equity Indices (WEI page)
+  "^GSPTSE": "INDEX:TSX",
+  "^BVSP":   "BMFBOVESPA:IBOV",
+  "^FTSE":   "TVC:UKX",
+  "^GDAXI":  "TVC:DAX",
+  "^FCHI":   "EURONEXT:PX1",
+  "^STOXX50E": "TVC:SX5E",
+  "^IBEX":   "TVC:IBEX35",
+  "^N225":   "TVC:NI225",
+  "^HSI":    "TVC:HSI",
+  "^AXJO":   "ASX:XAO",
+  "^KS11":   "TVC:KOSPI",
+  "^TWII":   "TWSE:TAIEX",
 };
 
 const FX_PAIRS = {
@@ -159,6 +172,15 @@ setInterval(() => {
     reconnectAll();
   }
 }, 30000);
+
+// Periodic session refresh every 10min to prevent stale session
+// (TV server may stop responding to new quote_add_symbols on old sessions)
+setInterval(() => {
+  if (tvClient && clientSubs.size > 0) {
+    console.error("[REFRESH] Periodic session refresh");
+    reconnectAll();
+  }
+}, 600000);
 
 function subscribeSymbol(yahooSym, tvSym) {
   if (markets.has(tvSym)) {
