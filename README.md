@@ -228,11 +228,15 @@ BBterminal/
 
 ## ▐ **LICENSE**
 
+This project is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE) for the full text.
+
 | Component | License |
 |-----------|---------|
-| **BBTerminal application code** | Yours to relicense |
-| **OpenBB Platform** | AGPL‑v3 (upstream) |
+| **BBTerminal application code** | AGPL‑3.0 (this repository) |
+| **OpenBB Platform** | AGPL‑v3 (upstream dependency) |
 | **Yahoo Finance data** | Subject to Yahoo's terms — personal use only |
+
+If you modify this software and make it accessible over a network, the AGPL requires you to offer the modified source code to its users. This is by design — it ensures the community always has access to improvements.
 
 ---
 

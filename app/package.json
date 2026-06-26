@@ -1,7 +1,10 @@
 {
   "name": "bbterminal",
-  "private": true,
   "version": "0.1.0",
+  "private": false,
+  "description": "Bloomberg-grade intelligence terminal — real-time data, signals engine, 17 analytical screens",
+  "homepage": "https://github.com/InfinityAlgo-Academy/OpenBB-Platform",
+  "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
