@@ -1,5 +1,6 @@
 
-<pre align="center">
+<div align="center">
+<pre>
 
 ██╗  ██╗██████╗ ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗
 ██║  ██║██╔══██╗╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║
@@ -9,6 +10,7 @@
 ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
 
 </pre>
+</div>
 
 <p align="center">
   <strong>A Bloomberg‑grade intelligence terminal for your laptop.</strong><br>
