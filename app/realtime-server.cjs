@@ -87,6 +87,9 @@ function toTradingView(sym) {
 let tvClient = null;
 let tvQuoteSession = null;
 let lastDataTime = 0;
+let reconnecting = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
 const markets = new Map();        // TV symbol -> { market, refs, lastData }
 const tvToYahoo = new Map();       // TV symbol -> Set<original Yahoo symbol>
 const clientSubs = new Map();      // WebSocket -> Set<original Yahoo symbol>
@@ -105,27 +108,46 @@ function resetTvClient() {
   lastDataTime = 0;
 }
 
+function reconnectAll() {
+  if (reconnecting) return;
+  reconnecting = true;
+  reconnectAttempts++;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  // Back off if reconnecting rapidly (>10 times in 60s)
+  if (reconnectAttempts > 10) {
+    console.error("[RT] Too many reconnects, waiting 30s before next attempt");
+    resetTvClient();
+    reconnectTimer = setTimeout(() => {
+      reconnectAttempts = 0;
+      reconnecting = false;
+      reconnectAll();
+    }, 30000);
+    return;
+  }
+  // Reset counter after 60s of stability
+  setTimeout(() => { reconnectAttempts = 0; }, 60000);
+
+  resetTvClient();
+  const allSyms = [...clientSubs.values()].flatMap(s => [...s]);
+  if (allSyms.length > 0) {
+    ensureTvConnected();
+    for (const sym of allSyms) {
+      const tvSym = toTradingView(sym);
+      subscribeSymbol(sym, tvSym);
+    }
+  }
+  reconnecting = false;
+}
+
 function ensureTvConnected() {
   if (tvClient) return;
   tvClient = new TradingView.Client();
-  const onTvDisconnect = () => {
-    console.error("[TV] Client disconnected");
-    resetTvClient();
-    const allSyms = [...clientSubs.values()].flatMap(s => [...s]);
-    if (allSyms.length > 0) {
-      ensureTvConnected();
-      for (const sym of allSyms) {
-        const tvSym = toTradingView(sym);
-        subscribeSymbol(sym, tvSym);
-      }
-    }
-  };
   tvClient.onError((...args) => {
     console.error("[TV] Client error:", ...args);
-    onTvDisconnect();
+    reconnectAll();
   });
   tvClient.onDisconnected(() => {
-    onTvDisconnect();
+    reconnectAll();
   });
   tvQuoteSession = new tvClient.Session.Quote();
 }
