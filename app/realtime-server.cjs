@@ -156,15 +156,7 @@ function ensureTvConnected() {
 setInterval(() => {
   if (tvClient && Date.now() - lastDataTime > 30000 && clientSubs.size > 0) {
     console.error("[WATCHDOG] No data for 30s — resetting TV client");
-    console.error("[WATCHDOG] No data for 60s — resetting TV client");
-    // Collect all active symbols before reset
-    const allSyms = [...clientSubs.values()].flatMap(s => [...s]);
-    resetTvClient();
-    // Re-subscribe everything
-    for (const sym of allSyms) {
-      const tvSym = toTradingView(sym);
-      subscribeSymbol(sym, tvSym);
-    }
+    reconnectAll();
   }
 }, 30000);
 

@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { CommandBar } from "@/components/CommandBar";
 import { QuickBar } from "@/components/QuickBar";
 import { WorkspaceTabs } from "@/components/WorkspaceTabs";
@@ -49,20 +48,24 @@ const SCREENS: Record<string, (symbol?: string) => JSX.Element> = {
 
 export default function App() {
   const { tabs, activeTabId } = useWorkspace();
-  const active = useMemo(() => tabs.find((t) => t.id === activeTabId) ?? tabs[0], [tabs, activeTabId]);
-  const screen = active && SCREENS[active.code]?.(active.symbol);
 
   return (
     <div className="h-screen flex flex-col">
       <CommandBar />
       <QuickBar />
       <WorkspaceTabs />
-      <div className="flex-1 min-h-0 p-1 flex">
-        {active && (
-          <FunctionPanel code={active.code} symbol={active.symbol}>
-            {screen ?? <div className="p-4 text-term-muted">Function not implemented.</div>}
-          </FunctionPanel>
-        )}
+      <div className="flex-1 min-h-0 p-1 flex relative">
+        {tabs.map((t) => {
+          const isActive = t.id === activeTabId;
+          const screen = SCREENS[t.code]?.(t.symbol) ?? <div className="p-4 text-term-muted">Function not implemented.</div>;
+          return (
+            <div key={t.id} className={isActive ? "flex flex-1 min-h-0 min-w-0" : "hidden"}>
+              <FunctionPanel code={t.code} symbol={t.symbol}>
+                {screen}
+              </FunctionPanel>
+            </div>
+          );
+        })}
       </div>
       <StatusBar />
     </div>
